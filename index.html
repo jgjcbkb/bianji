@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>HTML 编辑器 (流畅版)</title>
+    <style>
+        /* --- 基本样式 --- */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+
+        /* --- 工具栏 --- */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            padding: 8px;
+            background-color: #fff;
+            border-bottom: 1px solid #ccc;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            gap: 8px;
+        }
+
+        .toolbar button, .toolbar label {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            user-select: none;
+        }
+
+        .toolbar button:hover, .toolbar label:hover { background-color: #e9e9e9; }
+        .toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toolbar .view-toggle button.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        #file-input { display: none; }
+
+        /* --- 主内容区 --- */
+        .main-content { flex: 1; position: relative; overflow: hidden; }
+        .pane {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            overflow: auto;
+            background: #fff;
+        }
+        .preview-pane { display: none; }
+
+        #html-editor {
+            width: 100%;
+            height: 100%;
+            border: none;
+            outline: none;
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', 'monospace';
+            font-size: 15px;
+            line-height: 1.6;
+            resize: none;
+            box-sizing: border-box;
+        }
+
+        #preview-frame { width: 100%; height: 100%; border: none; }
+
+        /* --- 查找替换面板 --- */
+        .find-replace-panel {
+            position: fixed;
+            bottom: 0; left: 0;
+            width: 100%;
+            background-color: #f8f8f8;
+            border-top: 1px solid #ccc;
+            padding: 12px;
+            box-sizing: border-box;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1000;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        .find-replace-panel.active { transform: translateY(0); }
+        .find-replace-panel input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .find-replace-panel .actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+        .find-replace-panel .actions button { flex-grow: 1; padding: 8px; font-size: 14px; }
+
+        /* --- 响应式设计：桌面端 --- */
+        @media (min-width: 768px) {
+            .toolbar .view-toggle { display: none; }
+            .main-content { display: flex; }
+            .pane { flex: 1; position: static; display: block !important; }
+            .editor-pane { border-right: 1px solid #ccc; }
+            .find-replace-panel {
+                width: 400px;
+                top: 55px; right: 20px;
+                left: auto; bottom: auto;
+                border-radius: 8px; border: 1px solid #ccc;
+                transform: translateY(-200%);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 顶部工具栏 -->
+        <div class="toolbar">
+            <div class="view-toggle">
+                <button id="show-editor-btn" class="active">编辑</button>
+                <button id="show-preview-btn">预览</button>
+            </div>
+            <label for="file-input">打开</label>
+            <input type="file" id="file-input" accept=".html,.htm,.txt">
+            <button id="save-button">保存/下载</button>
+            <button id="undo-button" disabled>撤销</button>
+            <button id="redo-button" disabled>重做</button>
+            <button id="find-replace-toggle">查找/替换</button>
+        </div>
+
+        <!-- 主内容区域 -->
+        <div class="main-content">
+            <div id="editor-pane" class="pane editor-pane">
+                <textarea id="html-editor" spellcheck="false" autocapitalize="off"><!-- 在这里输入或粘贴你的 HTML 代码 -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>示例页面</title>
+</head>
+<body>
+    <h1>欢迎!</h1>
+    <p>这是一个移动友好的、流畅的编辑器。</p>
+    <p>尝试快速输入或粘贴大段文字，体验一下性能提升！</p>
+</body>
+</html></textarea>
+            </div>
+            <div id="preview-pane" class="pane preview-pane">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查找与替换面板 -->
+    <div id="find-replace-panel" class="find-replace-panel">
+        <input type="text" id="find-input" placeholder="查找...">
+        <input type="text" id="replace-input" placeholder="替换为...">
+        <div class="actions">
+            <button id="find-next-button">查找下一个</button>
+            <button id="replace-button">替换</button>
+            <button id="replace-all-button">全部替换</button>
+            <button id="close-panel-button" style="background-color: #eee;">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取 DOM 元素
+            const editor = document.getElementById('html-editor');
+            const previewFrame = document.getElementById('preview-frame');
+            const saveButton = document.getElementById('save-button');
+            const editorPane = document.getElementById('editor-pane');
+            const previewPane = document.getElementById('preview-pane');
+            const showEditorBtn = document.getElementById('show-editor-btn');
+            const showPreviewBtn = document.getElementById('show-preview-btn');
+
+            // --- 性能优化：防抖函数 ---
+            function debounce(func, delay) {
+                let timeout;
+                return function(...args) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(this, args), delay);
+                };
+            }
+
+            // --- 实时预览 ---
+            function updatePreview() {
+                const previewDoc = previewFrame.contentWindow.document;
+                previewDoc.open();
+                previewDoc.write(editor.value);
+                previewDoc.close();
+            }
+            
+            // 创建防抖版的更新函数
+            const debouncedUpdatePreview = debounce(updatePreview, 300);
+
+            editor.addEventListener('input', () => {
+                // 在桌面端使用防抖更新，避免卡顿
+                if (window.innerWidth >= 768) {
+                    debouncedUpdatePreview();
+                }
+                // 保存历史记录的操作也使用防抖
+                debouncedSaveState();
+            });
+
+            // --- 视图切换 (移动端) ---
+            showEditorBtn.addEventListener('click', () => {
+                editorPane.style.display = 'block';
+                previewPane.style.display = 'none';
+                showEditorBtn.classList.add('active');
+                showPreviewBtn.classList.remove('active');
+            });
+
+            showPreviewBtn.addEventListener('click', () => {
+                updatePreview(); // 移动端切换时，立即更新预览
+                editorPane.style.display = 'none';
+                previewPane.style.display = 'block';
+                showEditorBtn.classList.remove('active');
+                showPreviewBtn.classList.add('active');
+            });
+
+            // --- 文件操作 (打开 & 保存/下载) ---
+            document.getElementById('file-input').addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    editor.value = e.target.result;
+                    updatePreview();
+                    historyManager.clear();
+                    historyManager.saveState(editor.value);
+                    updateUndoRedoButtons();
+                    if (window.innerWidth < 768) showEditorBtn.click();
+                };
+                reader.readAsText(file);
+                event.target.value = null;
+            });
+
+            saveButton.addEventListener('click', () => {
+                const blob = new Blob([editor.value], { type: 'text/html;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'edited.html'; // 这是下载后的文件名
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+            });
+
+            // --- 撤销/重做 ---
+            const undoButton = document.getElementById('undo-button');
+            const redoButton = document.getElementById('redo-button');
+            const historyManager = {
+                undoStack: [], redoStack: [], limit: 50,
+                saveState(state) {
+                    // 只有当内容改变时才保存
+                    if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) {
+                        this.undoStack.push(state);
+                        if (this.undoStack.length > this.limit) this.undoStack.shift();
+                        this.redoStack = [];
+                        updateUndoRedoButtons();
+                    }
+                },
+                undo() {
+                    if (this.undoStack.length > 1) {
+                        this.redoStack.push(this.undoStack.pop());
+                        updateUndoRedoButtons();
+                        return this.undoStack[this.undoStack.length - 1];
+                    }
+                    return null;
+                },
+                redo() {
+                    if (this.redoStack.length > 0) {
+                        const nextState = this.redoStack.pop();
+                        this.undoStack.push(nextState);
+                        updateUndoRedoButtons();
+                        return nextState;
+                    }
+                    return null;
+                },
+                clear() { this.undoStack = []; this.redoStack = []; }
+            };
+            
+            const debouncedSaveState = debounce(() => historyManager.saveState(editor.value), 400);
+            
+            function updateUndoRedoButtons() {
+                undoButton.disabled = historyManager.undoStack.length <= 1;
+                redoButton.disabled = historyManager.redoStack.length === 0;
+            }
+
+            undoButton.addEventListener('click', () => {
+                const state = historyManager.undo();
+                if (state !== null) { editor.value = state; updatePreview(); }
+            });
+
+            redoButton.addEventListener('click', () => {
+                const state = historyManager.redo();
+                if (state !== null) { editor.value = state; updatePreview(); }
+            });
+
+            // --- 查找与替换面板 --- (这部分逻辑不变)
+            const findReplaceToggle = document.getElementById('find-replace-toggle');
+            const panel = document.getElementById('find-replace-panel');
+            const findInput = document.getElementById('find-input');
+            const findNextButton = document.getElementById('find-next-button');
+            const replaceButton = document.getElementById('replace-button');
+            const replaceAllButton = document.getElementById('replace-all-button');
+            const closePanelButton = document.getElementById('close-panel-button');
+            let lastSearchIndex = -1;
+
+            function togglePanel() {
+                panel.classList.toggle('active');
+                if (panel.classList.contains('active')) {
+                    findInput.focus();
+                    lastSearchIndex = editor.selectionStart;
+                }
+            }
+            findReplaceToggle.addEventListener('click', togglePanel);
+            closePanelButton.addEventListener('click', togglePanel);
+            findInput.addEventListener('input', () => { lastSearchIndex = -1; });
+
+            findNextButton.addEventListener('click', () => {
+                const searchText = findInput.value; if (!searchText) return;
+                const text = editor.value;
+                const startIndex = lastSearchIndex === -1 ? editor.selectionStart : lastSearchIndex;
+                let index = text.toLowerCase().indexOf(searchText.toLowerCase(), startIndex + 1);
+                if (index === -1) { index = text.toLowerCase().indexOf(searchText.toLowerCase(), 0); }
+                if (index === -1) { alert('没有找到匹配项。'); lastSearchIndex = -1; return; }
+                editor.focus();
+                editor.setSelectionRange(index, index + searchText.length);
+                lastSearchIndex = index;
+            });
+            
+            replaceButton.addEventListener('click', () => {
+                const searchText = findInput.value; const replaceText = document.getElementById('replace-input').value; if (!searchText) return;
+                const selection = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+                if (selection.toLowerCase() === searchText.toLowerCase()) {
+                    editor.setRangeText(replaceText, editor.selectionStart, editor.selectionEnd, 'end');
+                    debouncedSaveState();
+                    updatePreview();
+                    findNextButton.click();
+                } else { findNextButton.click(); }
+            });
+
+            replaceAllButton.addEventListener('click', () => {
+                const searchText = findInput.value; const replaceText = document.getElementById('replace-input').value; if (!searchText) return;
+                const originalValue = editor.value;
+                const regex = new RegExp(searchText.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+                let count = 0;
+                const newValue = originalValue.replace(regex, () => {
+                    count++;
+                    return replaceText;
+                });
+                if (count > 0) {
+                    editor.value = newValue;
+                    historyManager.saveState(editor.value); updatePreview();
+                    alert(`已完成 ${count} 处替换。`);
+                } else { alert('没有找到可替换的匹配项。'); }
+            });
+            
+            // --- 初始化 ---
+            updatePreview();
+            historyManager.saveState(editor.value);
+        });
+    </script>
+
+</body>
+</html>
