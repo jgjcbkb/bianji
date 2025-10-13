@@ -3,49 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>HTML 编辑器 (已修复)</title>
+    
+    <!-- === 苹果手机全屏显示和添加到桌面配置 (新增) === -->
+    <!-- 允许网页以全屏模式运行 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- 设置状态栏样式 (可选: default, black, black-translucent) -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <!-- 添加到主屏幕的标题 -->
+    <meta name="apple-mobile-web-app-title" content="HTML编辑器">
+    <!-- 添加到主屏幕的图标 (推荐使用 180x180 像素的 PNG 图片) -->
+    <!-- <link rel="apple-touch-icon" href="your-icon.png"> -->
+    
+    <title>HTML 编辑器 (全屏优化版)</title>
     <style>
-        /* CSS 样式与上一版相同，保持不变 */
-        body, html {
-            margin: 0; padding: 0; height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            overflow: hidden;
-        }
+        /* CSS 样式与之前版本相同，保持了响应式和功能性 */
+        body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
         .container { display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f4; }
-        .toolbar {
-            display: flex; flex-wrap: wrap; align-items: center;
-            padding: 8px; background-color: #fff; border-bottom: 1px solid #ccc;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex-shrink: 0; gap: 8px;
-        }
-        .toolbar button, .toolbar label {
-            padding: 8px 12px; border: 1px solid #ccc; background-color: #f9f9f9;
-            border-radius: 5px; cursor: pointer; font-size: 14px;
-            transition: background-color 0.2s, box-shadow 0.2s; user-select: none;
-        }
+        .toolbar { display: flex; flex-wrap: wrap; align-items: center; padding: 8px; background-color: #fff; border-bottom: 1px solid #ccc; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex-shrink: 0; gap: 8px; }
+        .toolbar button, .toolbar label { padding: 8px 12px; border: 1px solid #ccc; background-color: #f9f9f9; border-radius: 5px; cursor: pointer; font-size: 14px; transition: background-color 0.2s; user-select: none; }
         .toolbar button:hover, .toolbar label:hover { background-color: #e9e9e9; }
         .toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toolbar .view-toggle { display: flex; }
         .toolbar .view-toggle button.active { background-color: #007bff; color: white; border-color: #007bff; }
         #file-input { display: none; }
         .main-content { flex: 1; position: relative; overflow: hidden; }
         .pane { width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: auto; background: #fff; }
         .preview-pane { display: none; }
-        #html-editor {
-            width: 100%; height: 100%; border: none; outline: none; padding: 10px;
-            font-family: 'Consolas', 'Monaco', 'monospace'; font-size: 15px;
-            line-height: 1.6; resize: none; box-sizing: border-box;
-        }
+        #html-editor { width: 100%; height: 100%; border: none; outline: none; padding: 10px; font-family: 'Consolas', 'Monaco', 'monospace'; font-size: 15px; line-height: 1.6; resize: none; box-sizing: border-box; }
         #preview-frame { width: 100%; height: 100%; border: none; }
-        .find-replace-panel {
-            position: fixed; bottom: 0; left: 0; width: 100%; background-color: #f8f8f8;
-            border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box;
-            transform: translateY(100%); transition: transform 0.3s ease-in-out;
-            z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-        }
+        .find-replace-panel { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #f8f8f8; border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
         .find-replace-panel.active { transform: translateY(0); }
-        .find-replace-panel input {
-            width: 100%; padding: 10px; margin-bottom: 8px; box-sizing: border-box;
-            border: 1px solid #ccc; border-radius: 4px; font-size: 16px;
-        }
+        .find-replace-panel input { width: 100%; padding: 10px; margin-bottom: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
         .find-replace-panel .actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
         .find-replace-panel .actions button { flex-grow: 1; padding: 8px; font-size: 14px; }
         @media (min-width: 768px) {
@@ -53,54 +41,67 @@
             .main-content { display: flex; }
             .pane { flex: 1; position: static; display: block !important; }
             .editor-pane { border-right: 1px solid #ccc; }
-            .find-replace-panel {
-                width: 400px; top: 55px; right: 20px; left: auto; bottom: auto;
-                border-radius: 8px; border: 1px solid #ccc; transform: translateY(-200%);
-            }
+            .find-replace-panel { width: 400px; top: 55px; right: 20px; left: auto; bottom: auto; border-radius: 8px; border: 1px solid #ccc; transform: translateY(-200%); }
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- HTML 结构与上一版相同 -->
+        <!-- 工具栏 -->
         <div class="toolbar">
-            <div class="view-toggle"><button id="show-editor-btn" class="active">编辑</button><button id="show-preview-btn">预览</button></div>
-            <label for="file-input">打开</label><input type="file" id="file-input" accept=".html,.htm,.txt">
-            <button id="save-button">保存/下载</button><button id="undo-button" disabled>撤销</button>
-            <button id="redo-button" disabled>重做</button><button id="find-replace-toggle">查找/替换</button>
+            <div class="view-toggle">
+                <button id="show-editor-btn" class="active">编辑</button>
+                <button id="show-preview-btn">预览</button>
+            </div>
+            <label for="file-input">打开</label>
+            <input type="file" id="file-input" accept=".html,.htm,.txt">
+            <button id="save-button">保存/下载</button>
+            <button id="undo-button" disabled>撤销</button>
+            <button id="redo-button" disabled>重做</button>
+            <button id="find-replace-toggle">查找/替换</button>
         </div>
+
+        <!-- 主内容区 -->
         <div class="main-content">
             <div id="editor-pane" class="pane editor-pane">
-                <textarea id="html-editor" spellcheck="false" autocapitalize="off"></textarea>
+                <textarea id="html-editor" spellcheck="false" autocapitalize="off" autocorrect="off"><!-- 在这里输入或粘贴你的 HTML 代码 --></textarea>
             </div>
-            <div id="preview-pane" class="pane preview-pane"><iframe id="preview-frame"></iframe></div>
+            <div id="preview-pane" class="pane preview-pane">
+                <iframe id="preview-frame"></iframe>
+            </div>
         </div>
-        <div id="find-replace-panel" class="find-replace-panel">
-            <input type="text" id="find-input" placeholder="查找..."><input type="text" id="replace-input" placeholder="替换为...">
-            <div class="actions">
-                <button id="find-next-button">查找下一个</button><button id="replace-button">替换</button>
-                <button id="replace-all-button">全部替换</button><button id="close-panel-button" style="background-color: #eee;">关闭</button>
-            </div>
+    </div>
+
+    <!-- 查找与替换面板 -->
+    <div id="find-replace-panel" class="find-replace-panel">
+        <input type="text" id="find-input" placeholder="查找...">
+        <input type="text" id="replace-input" placeholder="替换为...">
+        <div class="actions">
+            <button id="find-next-button">查找下一个</button>
+            <button id="replace-button">替换</button>
+            <button id="replace-all-button">全部替换</button>
+            <button id="close-panel-button" style="background-color: #eee;">关闭</button>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // ... 前面的代码保持不变 ...
+            // 所有 JavaScript 代码与上一版基本相同，但新增了粘贴事件处理
             const editor = document.getElementById('html-editor');
             const previewFrame = document.getElementById('preview-frame');
-            
-            // ... 省略部分变量声明，逻辑不变 ...
-            
-            // --- 核心修复：粘贴后滚动到顶部 ---
-            editor.addEventListener('paste', () => {
-                // 使用 setTimeout 确保在粘贴操作完成后执行
-                setTimeout(() => {
-                    editor.scrollTop = 0;
-                }, 0);
-            });
+            // ... (其他元素获取)
 
+            // === 解决粘贴内容遮挡问题 (新增) ===
+            editor.addEventListener('paste', () => {
+                // 使用 setTimeout 等待浏览器完成粘贴操作
+                setTimeout(() => {
+                    // 将滚动条和光标都移动到最顶部
+                    editor.scrollTop = 0;
+                    editor.setSelectionRange(0, 0);
+                }, 1); // 极短的延迟确保DOM已更新
+            });
+            
             // --- 性能优化：防抖函数 ---
             function debounce(func, delay) {
                 let timeout;
@@ -110,15 +111,12 @@
                 };
             }
 
+            // --- 实时预览 ---
             function updatePreview() {
                 const previewDoc = previewFrame.contentWindow.document;
-                try {
-                    previewDoc.open();
-                    previewDoc.write(editor.value);
-                    previewDoc.close();
-                } catch (e) {
-                    console.error("Preview update failed:", e);
-                }
+                previewDoc.open();
+                previewDoc.write(editor.value);
+                previewDoc.close();
             }
             
             const debouncedUpdatePreview = debounce(updatePreview, 300);
@@ -130,25 +128,41 @@
                 debouncedSaveState();
             });
             
+            // ... (其余所有 JavaScript 功能代码保持不变) ...
+            // --- 视图切换 (移动端) ---
+            const editorPane = document.getElementById('editor-pane');
+            const previewPane = document.getElementById('preview-pane');
+            const showEditorBtn = document.getElementById('show-editor-btn');
+            const showPreviewBtn = document.getElementById('show-preview-btn');
+            showEditorBtn.addEventListener('click', () => {
+                editorPane.style.display = 'block';
+                previewPane.style.display = 'none';
+                showEditorBtn.classList.add('active');
+                showPreviewBtn.classList.remove('active');
+            });
+            showPreviewBtn.addEventListener('click', () => {
+                updatePreview();
+                editorPane.style.display = 'none';
+                previewPane.style.display = 'block';
+                showEditorBtn.classList.remove('active');
+                showPreviewBtn.classList.add('active');
+            });
+
             // --- 文件操作 ---
             document.getElementById('file-input').addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
+                const file = event.target.files[0]; if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     editor.value = e.target.result;
-                    // --- 核心修复：打开文件后滚动到顶部 ---
-                    editor.scrollTop = 0;
                     updatePreview();
                     historyManager.clear();
                     historyManager.saveState(editor.value);
                     updateUndoRedoButtons();
-                    if (window.innerWidth < 768) document.getElementById('show-editor-btn').click();
+                    if (window.innerWidth < 768) showEditorBtn.click();
                 };
                 reader.readAsText(file);
                 event.target.value = null;
             });
-
             document.getElementById('save-button').addEventListener('click', () => {
                 const blob = new Blob([editor.value], { type: 'text/html;charset=utf-8' });
                 const link = document.createElement('a');
@@ -160,123 +174,43 @@
                 URL.revokeObjectURL(link.href);
             });
 
-            // ... 撤销/重做 和 查找/替换 的大部分逻辑不变 ...
-            
-            const historyManager = { /* ... 内容同上 ... */ }; // 省略完整代码以保持简洁
-            const debouncedSaveState = debounce(() => historyManager.saveState(editor.value), 400);
-
-            // 查找替换部分
-            const replaceAllButton = document.getElementById('replace-all-button');
-            replaceAllButton.addEventListener('click', () => {
-                const searchText = document.getElementById('find-input').value; 
-                const replaceText = document.getElementById('replace-input').value; 
-                if (!searchText) return;
-                
-                const originalValue = editor.value;
-                const regex = new RegExp(searchText.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
-                let count = 0;
-                const newValue = originalValue.replace(regex, () => {
-                    count++;
-                    return replaceText;
-                });
-
-                if (count > 0) {
-                    editor.value = newValue;
-                    // --- 核心修复：全部替换后滚动到顶部 ---
-                    editor.scrollTop = 0;
-                    historyManager.saveState(editor.value); 
-                    updatePreview();
-                    alert(`已完成 ${count} 处替换。`);
-                } else { 
-                    alert('没有找到可替换的匹配项。'); 
-                }
-            });
-
-            // --- 初始化默认内容 ---
-            editor.value = `<!DOCTYPE html>
-<html>
-<head>
-    <title>示例页面</title>
-</head>
-<body>
-    <h1>欢迎!</h1>
-    <p>这是一个移动友好的、流畅的编辑器。</p>
-    <p>现在粘贴或打开文件时，顶部内容不会被遮挡了。</p>
-</body>
-</html>`;
-            updatePreview();
-            historyManager.saveState(editor.value);
-            
-            // --- 剩余的事件监听器 (为简洁省略了已展示的部分) ---
-            const showEditorBtn = document.getElementById('show-editor-btn');
-            const showPreviewBtn = document.getElementById('show-preview-btn');
-            showEditorBtn.addEventListener('click', () => { /* ... */ });
-            showPreviewBtn.addEventListener('click', () => { /* ... */ });
-            // ... 其他按钮的事件监听逻辑也需要包含进来，这里为简洁省略
-            // 为了让代码完整可运行，需要将上一版本中省略的JS逻辑补全
-            // --- 补全JS ---
-            historyManager.undoStack = []; historyManager.redoStack = []; historyManager.limit = 50;
-            historyManager.saveState = function(state) {
-                if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) {
-                    this.undoStack.push(state);
-                    if (this.undoStack.length > this.limit) this.undoStack.shift();
-                    this.redoStack = [];
-                    updateUndoRedoButtons();
-                }
-            };
-            historyManager.undo = function() {
-                if (this.undoStack.length > 1) {
-                    this.redoStack.push(this.undoStack.pop());
-                    updateUndoRedoButtons();
-                    return this.undoStack[this.undoStack.length - 1];
-                } return null;
-            };
-            historyManager.redo = function() {
-                if (this.redoStack.length > 0) {
-                    const nextState = this.redoStack.pop(); this.undoStack.push(nextState);
-                    updateUndoRedoButtons(); return nextState;
-                } return null;
-            };
-            historyManager.clear = function() { this.undoStack = []; this.redoStack = []; };
+            // --- 撤销/重做 ---
             const undoButton = document.getElementById('undo-button');
             const redoButton = document.getElementById('redo-button');
-            function updateUndoRedoButtons() {
-                undoButton.disabled = historyManager.undoStack.length <= 1;
-                redoButton.disabled = historyManager.redoStack.length === 0;
-            }
-            undoButton.addEventListener('click', () => {
-                const state = historyManager.undo(); if (state !== null) { editor.value = state; updatePreview(); }
-            });
-            redoButton.addEventListener('click', () => {
-                const state = historyManager.redo(); if (state !== null) { editor.value = state; updatePreview(); }
-            });
-            const editorPane = document.getElementById('editor-pane');
-            const previewPane = document.getElementById('preview-pane');
-            showEditorBtn.addEventListener('click', () => {
-                editorPane.style.display = 'block'; previewPane.style.display = 'none';
-                showEditorBtn.classList.add('active'); showPreviewBtn.classList.remove('active');
-            });
-            showPreviewBtn.addEventListener('click', () => {
-                updatePreview(); editorPane.style.display = 'none'; previewPane.style.display = 'block';
-                showEditorBtn.classList.remove('active'); showPreviewBtn.classList.add('active');
-            });
+            const historyManager = {
+                undoStack: [], redoStack: [], limit: 50,
+                saveState(state) {
+                    if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) {
+                        this.undoStack.push(state);
+                        if (this.undoStack.length > this.limit) this.undoStack.shift();
+                        this.redoStack = [];
+                        updateUndoRedoButtons();
+                    }
+                },
+                undo() { if (this.undoStack.length > 1) { this.redoStack.push(this.undoStack.pop()); updateUndoRedoButtons(); return this.undoStack[this.undoStack.length - 1]; } return null; },
+                redo() { if (this.redoStack.length > 0) { const nextState = this.redoStack.pop(); this.undoStack.push(nextState); updateUndoRedoButtons(); return nextState; } return null; },
+                clear() { this.undoStack = []; this.redoStack = []; }
+            };
+            const debouncedSaveState = debounce(() => historyManager.saveState(editor.value), 400);
+            function updateUndoRedoButtons() { undoButton.disabled = historyManager.undoStack.length <= 1; redoButton.disabled = historyManager.redoStack.length === 0; }
+            undoButton.addEventListener('click', () => { const state = historyManager.undo(); if (state !== null) { editor.value = state; updatePreview(); } });
+            redoButton.addEventListener('click', () => { const state = historyManager.redo(); if (state !== null) { editor.value = state; updatePreview(); } });
+
+            // --- 查找与替换 ---
             const findReplaceToggle = document.getElementById('find-replace-toggle');
             const panel = document.getElementById('find-replace-panel');
             const findInput = document.getElementById('find-input');
             const findNextButton = document.getElementById('find-next-button');
             const replaceButton = document.getElementById('replace-button');
+            const replaceAllButton = document.getElementById('replace-all-button');
             const closePanelButton = document.getElementById('close-panel-button');
             let lastSearchIndex = -1;
-            function togglePanel() {
-                panel.classList.toggle('active');
-                if (panel.classList.contains('active')) { findInput.focus(); lastSearchIndex = editor.selectionStart; }
-            }
+            function togglePanel() { panel.classList.toggle('active'); if (panel.classList.contains('active')) { findInput.focus(); lastSearchIndex = editor.selectionStart; } }
             findReplaceToggle.addEventListener('click', togglePanel);
             closePanelButton.addEventListener('click', togglePanel);
             findInput.addEventListener('input', () => { lastSearchIndex = -1; });
             findNextButton.addEventListener('click', () => {
-                const searchText = findInput.value; if (!searchText) return;
-                const text = editor.value;
+                const searchText = findInput.value; if (!searchText) return; const text = editor.value;
                 const startIndex = lastSearchIndex === -1 ? editor.selectionStart : lastSearchIndex;
                 let index = text.toLowerCase().indexOf(searchText.toLowerCase(), startIndex + 1);
                 if (index === -1) { index = text.toLowerCase().indexOf(searchText.toLowerCase(), 0); }
@@ -286,12 +220,20 @@
             replaceButton.addEventListener('click', () => {
                 const searchText = findInput.value; const replaceText = document.getElementById('replace-input').value; if (!searchText) return;
                 const selection = editor.value.substring(editor.selectionStart, editor.selectionEnd);
-                if (selection.toLowerCase() === searchText.toLowerCase()) {
-                    editor.setRangeText(replaceText, editor.selectionStart, editor.selectionEnd, 'end');
-                    debouncedSaveState(); updatePreview(); findNextButton.click();
-                } else { findNextButton.click(); }
+                if (selection.toLowerCase() === searchText.toLowerCase()) { editor.setRangeText(replaceText, editor.selectionStart, editor.selectionEnd, 'end'); debouncedSaveState(); updatePreview(); findNextButton.click(); } else { findNextButton.click(); }
             });
+            replaceAllButton.addEventListener('click', () => {
+                const searchText = findInput.value; const replaceText = document.getElementById('replace-input').value; if (!searchText) return;
+                const regex = new RegExp(searchText.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let count = 0;
+                const newValue = editor.value.replace(regex, () => { count++; return replaceText; });
+                if (count > 0) { editor.value = newValue; historyManager.saveState(editor.value); updatePreview(); alert(`已完成 ${count} 处替换。`); } else { alert('没有找到可替换的匹配项。'); }
+            });
+
+            // --- 初始化 ---
+            historyManager.saveState(editor.value);
+            if (window.innerWidth >= 768) { updatePreview(); }
         });
     </script>
+
 </body>
 </html>
