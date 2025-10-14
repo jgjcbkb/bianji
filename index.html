@@ -6,9 +6,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Web编辑器">
-    <title>Web 编辑器 (持久化修复版)</title>
+    <title>Web 编辑器 (最终修复版)</title>
     <style>
-        /* CSS 与上一版相同，布局已稳定 */
         body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
         .container { display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f4; }
         .main-content { flex: 1 1 0; position: relative; overflow: hidden; min-height: 0; }
@@ -21,113 +20,86 @@
         #file-input { display: none; }
         .pane { width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow: auto; background: #fff; }
         .preview-pane { display: none; }
-        #html-editor { width: 100%; height: 100%; border: none; outline: none; padding: 10px; font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 15px; line-height: 1.6; resize: none; box-sizing: border-box; }
+        .editor-wrapper { position: relative; width: 100%; height: 100%; }
+        #html-editor, #highlight-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; outline: none; padding: 10px; margin: 0; font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 15px; line-height: 1.6; box-sizing: border-box; white-space: pre-wrap; word-wrap: break-word; }
+        #html-editor { z-index: 1; color: transparent; background: transparent; caret-color: #333; resize: none; }
+        #highlight-overlay { z-index: 0; color: #333; background-color: #fff; pointer-events: none; overflow: hidden; }
+        #highlight-overlay mark { background-color: rgba(255, 229, 0, 0.5); border-radius: 2px; }
+        #highlight-overlay mark.current-match { background-color: #ff9800; }
         #preview-frame { width: 100%; height: 100%; border: none; background-color: #fff; }
         .status-bar { background-color: #f0f0f0; padding: 4px 12px; font-size: 12px; color: #555; border-top: 1px solid #ccc; text-align: right; flex-shrink: 0; }
-        .find-replace-panel { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #f8f8f8; border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
+        .find-replace-panel, .modal { position: fixed; background-color: #f8f8f8; border-top: 1px solid #ccc; padding: 12px; box-sizing: border-box; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
+        .find-replace-panel { bottom: 0; left: 0; width: 100%; transform: translateY(100%); transition: transform 0.3s ease-in-out; }
         .find-replace-panel.active { transform: translateY(0); }
-        .find-replace-panel input { width: 100%; padding: 10px; margin-bottom: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-        .find-replace-panel .actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-        .find-replace-panel .actions button { flex-grow: 1; padding: 8px; font-size: 14px; }
-        @media (min-width: 768px) {
-            .toolbar { flex-wrap: nowrap; }
-            .main-content { display: flex; flex-direction: row; }
-            .pane { flex: 1; position: static; }
-            .editor-pane { border-right: 1px solid #ccc; }
-            .find-replace-panel { width: 400px; top: 55px; right: 20px; left: auto; bottom: auto; border-radius: 8px; border: 1px solid #ccc; transform: translateY(-200%); }
-        }
+        .input-group { position: relative; }
+        .find-replace-panel input, .modal textarea { width: 100%; padding: 10px; margin-bottom: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        .search-counter { position: absolute; right: 10px; top: 12px; font-size: 14px; color: #888; user-select: none; }
+        .actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+        .actions button { flex-grow: 1; padding: 8px; font-size: 14px; }
+        .nav-buttons { flex-basis: 100%; display: flex; gap: 8px; }
+        .modal { display: none; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 400px; border-radius: 8px; }
+        .modal h3 { margin-top: 0; }
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 999; }
+        @media (min-width: 768px) { .toolbar { flex-wrap: nowrap; } .main-content { display: flex; flex-direction: row; } .pane { flex: 1; position: static; } .editor-pane { border-right: 1px solid #ccc; } .find-replace-panel { width: 400px; top: 55px; right: 20px; left: auto; bottom: auto; border-radius: 8px; transform: translateY(-200%); } }
     </style>
 </head>
 <body>
+
     <div class="container">
-        <!-- 工具栏 -->
-        <div class="toolbar"><!-- ... 按钮与之前相同 ... --></div>
-        <!-- 主内容区 -->
-        <div class="main-content">
-            <div id="editor-pane" class="pane editor-pane">
-                <textarea id="html-editor" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
-            </div>
-            <div id="preview-pane" class="pane preview-pane">
-                <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
-            </div>
+        <div class="toolbar">
+            <div id="view-toggle" class="view-toggle"><button id="show-editor-btn" class="active">编辑</button><button id="show-preview-btn">预览</button></div>
+            <label for="file-input">打开</label><input type="file" id="file-input" accept=".html,.htm,.css,.js,.json,.txt,.md,.xml,.svg">
+            <button id="save-button">保存/下载</button><button id="undo-button" disabled>撤销</button><button id="redo-button" disabled>重做</button>
+            <button id="find-replace-toggle">查找</button><button id="format-newlines-btn">格式化\n</button><button id="chapter-process-btn" style="display: none;">章节处理</button>
+            <button id="copy-content-btn">复制内容</button><button id="clear-content-btn">清空内容</button>
         </div>
-        <!-- 状态栏 -->
-        <div class="status-bar">
-            <span id="char-count">字符: 0</span> | <span id="line-count">行: 1</span>
+
+        <div class="main-content">
+            <div id="editor-pane" class="pane editor-pane"><div class="editor-wrapper"><div id="highlight-overlay"></div><textarea id="html-editor" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea></div></div>
+            <div id="preview-pane" class="pane preview-pane"><iframe id="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe></div>
+        </div>
+        
+        <div class="status-bar"><span id="char-count">字符: 0</span> | <span id="line-count">行: 1</span></div>
+    </div>
+
+    <div id="find-replace-panel" class="find-replace-panel">
+        <div class="input-group"><input type="text" id="find-input" placeholder="查找..."><span id="search-counter" class="search-counter"></span></div>
+        <input type="text" id="replace-input" placeholder="替换为...">
+        <div class="actions"><div class="nav-buttons"><button id="find-prev-button">上一个</button><button id="find-next-button">下一个</button></div>
+            <button id="replace-button">替换</button><button id="replace-all-button">全部替换</button><button id="close-panel-button" style="background-color: #eee;">关闭</button>
         </div>
     </div>
-    <!-- 查找与替换面板 -->
-    <div id="find-replace-panel" class="find-replace-panel"><!-- ... 与之前相同 ... --></div>
+
+    <div id="chapter-modal-backdrop" class="modal-backdrop"></div>
+    <div id="chapter-modal" class="modal">
+        <h3>批量章节处理</h3><p>在每个章节标题前，添加能实现分隔的内容：</p>
+        <textarea id="chapter-input" rows="3" placeholder="例如：&#10;---&#10; (换行---换行)"></textarea>
+        <div class="actions"><button id="chapter-process-confirm">执行</button><button id="chapter-process-cancel" style="background-color: #eee;">取消</button></div>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // 将工具栏和查找面板的HTML结构移到JS中动态生成，使HTML更简洁
-            const toolbarContainer = document.querySelector('.toolbar');
-            toolbarContainer.innerHTML = `
-                <div id="view-toggle" class="view-toggle">
-                    <button id="show-editor-btn" class="active">编辑</button>
-                    <button id="show-preview-btn">预览</button>
-                </div>
-                <label for="file-input">打开</label>
-                <input type="file" id="file-input" accept=".html,.htm,.css,.js,.json,.txt,.md,.xml,.svg">
-                <button id="save-button">保存/下载</button>
-                <button id="undo-button" disabled>撤销</button>
-                <button id="redo-button" disabled>重做</button>
-                <button id="find-replace-toggle">查找</button>
-                <button id="format-newlines-btn">格式化\\n</button>
-                <button id="copy-content-btn">复制内容</button>
-                <button id="clear-content-btn">清空内容</button>
-            `;
-            const findReplacePanelContainer = document.querySelector('#find-replace-panel');
-            findReplacePanelContainer.innerHTML = `
-                <input type="text" id="find-input" placeholder="查找...">
-                <input type="text" id="replace-input" placeholder="替换为...">
-                <div class="actions">
-                    <button id="find-next-button">查找下一个</button>
-                    <button id="replace-button">替换</button>
-                    <button id="replace-all-button">全部替换</button>
-                    <button id="close-panel-button" style="background-color: #eee;">关闭</button>
-                </div>
-            `;
-            
             const editor = document.getElementById('html-editor');
+            const highlightOverlay = document.getElementById('highlight-overlay');
             const previewFrame = document.getElementById('preview-frame');
             const charCountEl = document.getElementById('char-count');
             const lineCountEl = document.getElementById('line-count');
             const viewToggle = document.getElementById('view-toggle');
+            const chapterProcessBtn = document.getElementById('chapter-process-btn');
             
             let currentFileInfo = { name: 'untitled.txt', type: 'text/plain' };
+            let searchResults = { indices: [], currentIndex: -1, query: '' };
 
-            // === 核心功能区 ===
-            function debounce(func, delay) { let t; return function(...a) { clearTimeout(t); t = setTimeout(() => func.apply(this, a), delay); }; }
-            
-            // 彻底修复预览问题：使用 srcdoc
-            function updatePreview() {
-                previewFrame.srcdoc = editor.value;
-            }
-            const debouncedUpdatePreview = debounce(updatePreview, 300);
-
-            // 状态栏更新
-            function updateStatusBar() {
-                const text = editor.value;
-                charCountEl.textContent = `字符: ${text.length}`;
-                lineCountEl.textContent = `行: ${text.split('\n').length}`;
-            }
-
-            // === 自动保存与恢复 (LocalStorage) ===
             const AUTOSAVE_CONTENT_KEY = 'editor_autosave_content';
             const AUTOSAVE_FILENAME_KEY = 'editor_autosave_filename';
 
-            function saveToLocalStorage() {
-                localStorage.setItem(AUTOSAVE_CONTENT_KEY, editor.value);
-                localStorage.setItem(AUTOSAVE_FILENAME_KEY, currentFileInfo.name);
-            }
-
-            function clearLocalStorage() {
-                localStorage.removeItem(AUTOSAVE_CONTENT_KEY);
-                localStorage.removeItem(AUTOSAVE_FILENAME_KEY);
-            }
+            function debounce(func, delay) { let t; return function(...a) { clearTimeout(t); t = setTimeout(() => func.apply(this, a), delay); }; }
             
+            function updatePreview() { previewFrame.srcdoc = editor.value; }
+            function updateStatusBar() { const text = editor.value; charCountEl.textContent = `字符: ${text.length}`; lineCountEl.textContent = `行: ${text.split('\n').length}`; }
+
+            function saveToLocalStorage() { localStorage.setItem(AUTOSAVE_CONTENT_KEY, editor.value); localStorage.setItem(AUTOSAVE_FILENAME_KEY, currentFileInfo.name); }
+            function clearLocalStorage() { localStorage.removeItem(AUTOSAVE_CONTENT_KEY); localStorage.removeItem(AUTOSAVE_FILENAME_KEY); }
             function loadFromLocalStorage() {
                 const savedContent = localStorage.getItem(AUTOSAVE_CONTENT_KEY);
                 if (savedContent) {
@@ -135,106 +107,134 @@
                     if (confirm(`检测到上次未保存的内容 (${savedFilename})，是否恢复？`)) {
                         editor.value = savedContent;
                         handleFileType(savedFilename);
-                        updatePreview();
-                        updateStatusBar();
-                        historyManager.clear();
-                        historyManager.saveState(savedContent);
-                    } else {
-                        clearLocalStorage(); // 用户选择不恢复，则清除
-                    }
+                        syncEditorState(true);
+                    } else { clearLocalStorage(); }
                 }
             }
-            // ===
-
-            editor.addEventListener('input', () => {
-                if (currentFileInfo.type.startsWith('text/html') && window.innerWidth >= 768) debouncedUpdatePreview();
-                debouncedSaveState();
+            
+            function syncEditorState(isInitialLoad = false) {
+                if (currentFileInfo.type === 'text/html') { updatePreview(); }
                 updateStatusBar();
-                saveToLocalStorage(); // 每次输入后自动保存
-            });
+                if(!isInitialLoad) { historyManager.saveState(editor.value); }
+                invalidateSearchResults();
+                highlightOverlay.textContent = editor.value;
+            }
 
-            // 文件类型处理
             function handleFileType(fileName) {
                 const extension = fileName.split('.').pop().toLowerCase();
                 const isHtml = ['html', 'htm'].includes(extension);
+                const isTxt = ['txt', 'md'].includes(extension);
                 currentFileInfo.name = fileName;
                 currentFileInfo.type = isHtml ? 'text/html' : 'text/plain';
                 viewToggle.style.display = isHtml ? 'flex' : 'none';
+                chapterProcessBtn.style.display = isTxt ? 'block' : 'none';
                 if (!isHtml) { document.getElementById('editor-pane').style.display = 'block'; document.getElementById('preview-pane').style.display = 'none'; document.getElementById('show-editor-btn').classList.add('active'); }
             }
 
-            // --- 按钮事件绑定 ---
+            editor.addEventListener('input', () => {
+                syncEditorState();
+                saveToLocalStorage();
+                debouncedSaveState();
+            });
+            editor.addEventListener('scroll', () => { highlightOverlay.scrollTop = editor.scrollTop; highlightOverlay.scrollLeft = editor.scrollLeft; });
+            editor.addEventListener('keydown', function(e) { if (e.key === 'Tab') { e.preventDefault(); const start = this.selectionStart; this.value = this.value.substring(0, start) + "  " + this.value.substring(this.selectionEnd); this.selectionStart = this.selectionEnd = start + 2; } const pairs = { '(': ')', '[': ']', '{': '}', "'": "'", '"': '"' }; if (pairs[e.key]) { e.preventDefault(); const start = this.selectionStart; const end = this.selectionEnd; this.value = this.value.substring(0, start) + e.key + this.value.substring(start, end) + pairs[e.key] + this.value.substring(end); this.selectionStart = this.selectionEnd = start + 1; } });
+            
             document.getElementById('file-input').addEventListener('change', (e) => {
-                clearLocalStorage(); // 打开新文件时清除草稿
-                const file = e.target.files[0]; if (!file) return; handleFileType(file.name);
+                clearLocalStorage(); const file = e.target.files[0]; if (!file) return; handleFileType(file.name);
                 const reader = new FileReader();
-                reader.onload = (e) => { editor.value = e.target.result; if (currentFileInfo.type === 'text/html') updatePreview(); historyManager.clear(); historyManager.saveState(editor.value); updateUndoRedoButtons(); updateStatusBar(); };
+                reader.onload = (e) => { editor.value = e.target.result; historyManager.clear(); syncEditorState(true); };
                 reader.readAsText(file); e.target.value = null;
             });
             document.getElementById('save-button').addEventListener('click', () => {
                 const blob = new Blob([editor.value], { type: `${currentFileInfo.type};charset=utf-8` });
-                const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = currentFileInfo.name;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
-                clearLocalStorage(); // 保存成功后清除草稿
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = currentFileInfo.name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+                clearLocalStorage();
             });
-            document.getElementById('clear-content-btn').addEventListener('click', () => {
-                if (confirm('确定要清空所有内容吗？此操作可以撤销。')) {
-                    historyManager.saveState(editor.value); editor.value = ''; updatePreview();
-                    historyManager.saveState(''); updateStatusBar();
-                    clearLocalStorage(); // 清空时也清除草稿
-                }
+            document.getElementById('clear-content-btn').addEventListener('click', () => { if (confirm('确定要清空所有内容吗？此操作可以撤销。')) { historyManager.saveState(editor.value); editor.value = ''; syncEditorState(); clearLocalStorage(); } });
+            document.getElementById('copy-content-btn').addEventListener('click', () => { if (!editor.value) { alert('内容为空。'); return; } navigator.clipboard.writeText(editor.value).then(() => { alert('已复制到剪贴板！'); }).catch(err => { alert('复制失败。'); }); });
+            document.getElementById('format-newlines-btn').addEventListener('click', () => { const newText = editor.value.replace(/\\n/g, '\n'); if (editor.value !== newText) { editor.value = newText; syncEditorState(); alert('格式化完成！'); } else { alert('未找到 "\\n"。'); } });
+            
+            const chapterModal = document.getElementById('chapter-modal');
+            const chapterModalBackdrop = document.getElementById('chapter-modal-backdrop');
+            chapterProcessBtn.addEventListener('click', () => { chapterModal.style.display = 'block'; chapterModalBackdrop.style.display = 'block'; });
+            document.getElementById('chapter-process-cancel').addEventListener('click', () => { chapterModal.style.display = 'none'; chapterModalBackdrop.style.display = 'none'; });
+            document.getElementById('chapter-process-confirm').addEventListener('click', () => {
+                let contentToAdd = document.getElementById('chapter-input').value.replace(/\\n/g, '\n');
+                if (!contentToAdd) { alert("请输入要添加的内容。"); return; }
+                const chapterRegex = /^(第\s*[一二三四五六七八九十百千万\d]+\s*章.*)$/gm;
+                let changesMade = 0;
+                let newText = editor.value.replace(chapterRegex, (match) => {
+                    changesMade++;
+                    return `\n\n${contentToAdd}\n\n${match}`;
+                });
+                if (changesMade > 0) {
+                    newText = newText.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
+                    editor.value = newText;
+                    syncEditorState();
+                    alert(`已为 ${changesMade} 个章节标题添加分隔内容。`);
+                } else { alert('未找到符合格式的章节标题。\n格式示例: "第一章" 或 "第 1 章"'); }
+                chapterModal.style.display = 'none';
+                chapterModalBackdrop.style.display = 'none';
             });
             
-            // ... [其他按钮和编辑器增强功能] ...
-            editor.addEventListener('paste', () => { setTimeout(() => { editor.scrollTop = 0; editor.setSelectionRange(0, 0); }, 1); });
-            editor.addEventListener('keydown', function(e) { if (e.key === 'Tab') { e.preventDefault(); const start = this.selectionStart; this.value = this.value.substring(0, start) + "  " + this.value.substring(this.selectionEnd); this.selectionStart = this.selectionEnd = start + 2; } const pairs = { '(': ')', '[': ']', '{': '}', "'": "'", '"': '"' }; if (pairs[e.key]) { e.preventDefault(); const start = this.selectionStart; const end = this.selectionEnd; this.value = this.value.substring(0, start) + e.key + this.value.substring(start, end) + pairs[e.key] + this.value.substring(end); this.selectionStart = this.selectionEnd = start + 1; } });
-            document.getElementById('copy-content-btn').addEventListener('click', () => { if (!editor.value) { alert('内容为空。'); return; } navigator.clipboard.writeText(editor.value).then(() => { alert('已复制到剪贴板！'); }).catch(err => { alert('复制失败。'); }); });
-            document.getElementById('format-newlines-btn').addEventListener('click', () => { const newText = editor.value.replace(/\\n/g, '\n'); if (editor.value !== newText) { editor.value = newText; updatePreview(); historyManager.saveState(newText); alert('格式化完成！'); } else { alert('未找到 "\\n"。'); } });
             const editorPane = document.getElementById('editor-pane'); const previewPane = document.getElementById('preview-pane'); const showEditorBtn = document.getElementById('show-editor-btn'); const showPreviewBtn = document.getElementById('show-preview-btn');
             showEditorBtn.addEventListener('click', () => { editorPane.style.display = 'block'; previewPane.style.display = 'none'; showEditorBtn.classList.add('active'); showPreviewBtn.classList.remove('active'); });
             showPreviewBtn.addEventListener('click', () => { updatePreview(); editorPane.style.display = 'none'; previewPane.style.display = 'block'; showEditorBtn.classList.remove('active'); showPreviewBtn.classList.add('active'); });
-            const undoButton = document.getElementById('undo-button'); const redoButton = document.getElementById('redo-button'); const historyManager = { undoStack: [], redoStack: [], limit: 50, saveState(state) { if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) { this.undoStack.push(state); if (this.undoStack.length > this.limit) this.undoStack.shift(); this.redoStack = []; updateUndoRedoButtons(); } }, undo() { if (this.undoStack.length > 1) { this.redoStack.push(this.undoStack.pop()); updateUndoRedoButtons(); return this.undoStack[this.undoStack.length - 1]; } return null; }, redo() { if (this.redoStack.length > 0) { const nextState = this.redoStack.pop(); this.undoStack.push(nextState); updateUndoRedoButtons(); return nextState; } return null; }, clear() { this.undoStack = []; this.redoStack = []; } };
+            
+            const undoButton = document.getElementById('undo-button'); const redoButton = document.getElementById('redo-button');
+            const historyManager = { undoStack: [], redoStack: [], limit: 50, saveState(state) { if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) { this.undoStack.push(state); if (this.undoStack.length > this.limit) this.undoStack.shift(); this.redoStack = []; updateUndoRedoButtons(); } }, undo() { if (this.undoStack.length > 1) { this.redoStack.push(this.undoStack.pop()); updateUndoRedoButtons(); return this.undoStack[this.undoStack.length - 1]; } return null; }, redo() { if (this.redoStack.length > 0) { const nextState = this.redoStack.pop(); this.undoStack.push(nextState); updateUndoRedoButtons(); return nextState; } return null; }, clear() { this.undoStack = []; this.redoStack = []; } };
             const debouncedSaveState = debounce(() => historyManager.saveState(editor.value), 400);
             function updateUndoRedoButtons() { undoButton.disabled = historyManager.undoStack.length <= 1; redoButton.disabled = historyManager.redoStack.length === 0; }
-            undoButton.addEventListener('click', () => { const state = historyManager.undo(); if (state !== null) { editor.value = state; updatePreview(); updateStatusBar();} });
-            redoButton.addEventListener('click', () => { const state = historyManager.redo(); if (state !== null) { editor.value = state; updatePreview(); updateStatusBar(); } });
-
-            // === 查找功能修复与增强 ===
-            const findNextButton = document.getElementById('find-next-button');
-            findNextButton.addEventListener('click', () => {
-                const findInput = document.getElementById('find-input');
-                const searchText = findInput.value; if (!searchText) return;
-                const text = editor.value;
-                let lastSearchIndex = editor.selectionEnd; // 从当前光标后开始查找
-                let index = text.toLowerCase().indexOf(searchText.toLowerCase(), lastSearchIndex);
-                if (index === -1) { // 如果找不到，从头开始
-                    index = text.toLowerCase().indexOf(searchText.toLowerCase(), 0);
+            undoButton.addEventListener('click', () => { const state = historyManager.undo(); if (state !== null) { editor.value = state; syncEditorState(); } });
+            redoButton.addEventListener('click', () => { const state = historyManager.redo(); if (state !== null) { editor.value = state; syncEditorState(); } });
+            
+            const findInput = document.getElementById('find-input'); const searchCounter = document.getElementById('search-counter');
+            function escapeHTML(str) { return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+            function invalidateSearchResults() { searchCounter.textContent = '内容已修改'; searchResults.indices = []; updateHighlightOverlay(); }
+            function updateHighlightOverlay() {
+                if (!searchResults.query || searchResults.indices.length === 0) { highlightOverlay.innerHTML = escapeHTML(editor.value); return; }
+                const escapedQuery = searchResults.query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(escapedQuery, 'gi'); let newHTML = ''; let lastIndex = 0; let match;
+                while((match = regex.exec(editor.value)) !== null) {
+                    const matchIndexInArray = searchResults.indices.indexOf(match.index);
+                    const isCurrent = matchIndexInArray === searchResults.currentIndex;
+                    newHTML += escapeHTML(editor.value.substring(lastIndex, match.index));
+                    newHTML += `<mark class="${isCurrent ? 'current-match' : ''}">${escapeHTML(match[0])}</mark>`;
+                    lastIndex = regex.lastIndex;
                 }
-                if (index === -1) { alert('没有找到匹配项。'); return; }
-                
-                // 选中并跳转
-                editor.focus();
-                editor.setSelectionRange(index, index + searchText.length);
-                
-                // 滚动到视图中央
-                const textBefore = editor.value.substring(0, index);
-                const lineBreaks = textBefore.match(/\n/g);
-                const line = lineBreaks ? lineBreaks.length : 0;
-                const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
-                editor.scrollTop = (line * lineHeight) - (editor.clientHeight / 2); // 尝试滚动到中央
-            });
-            // ... [其他查找替换按钮逻辑] ...
-            const findReplaceToggle = document.getElementById('find-replace-toggle'); const panel = document.getElementById('find-replace-panel'); const closePanelButton = document.getElementById('close-panel-button');
-            function togglePanel() { panel.classList.toggle('active'); if (panel.classList.contains('active')) { document.getElementById('find-input').focus(); } }
-            findReplaceToggle.addEventListener('click', togglePanel); closePanelButton.addEventListener('click', togglePanel);
-            document.getElementById('replace-button').addEventListener('click', () => { const s = document.getElementById('find-input').value; const r = document.getElementById('replace-input').value; if (!s) return; if (editor.value.substring(editor.selectionStart, editor.selectionEnd).toLowerCase() === s.toLowerCase()) { editor.setRangeText(r, editor.selectionStart, editor.selectionEnd, 'end'); debouncedSaveState(); updatePreview(); findNextButton.click(); } else { findNextButton.click(); } });
-            document.getElementById('replace-all-button').addEventListener('click', () => { const s = document.getElementById('find-input').value; const r = document.getElementById('replace-input').value; if (!s) return; const regex = new RegExp(s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let count = 0; const newVal = editor.value.replace(regex, () => { count++; return r; }); if (count > 0) { editor.value = newVal; historyManager.saveState(newVal); updatePreview(); alert(`已完成 ${count} 处替换。`); } else { alert('没有找到可替换的匹配项。'); } });
+                newHTML += escapeHTML(editor.value.substring(lastIndex));
+                highlightOverlay.innerHTML = newHTML;
+            }
+            function updateSearch() {
+                const query = findInput.value;
+                if (!query) { searchResults = { indices: [], currentIndex: -1, query: '' }; updateSearchCounter(); updateHighlightOverlay(); return; }
+                searchResults.query = query; searchResults.indices = [];
+                const regex = new RegExp(query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let match;
+                while ((match = regex.exec(editor.value)) !== null) { searchResults.indices.push(match.index); }
+                searchResults.currentIndex = -1;
+                if (searchResults.indices.length > 0) { jumpToMatch(0); } else { updateSearchCounter(); updateHighlightOverlay(); }
+            }
+            function jumpToMatch(index) { if (searchResults.indices.length === 0) return; searchResults.currentIndex = index; updateHighlightOverlay(); const currentMark = highlightOverlay.querySelector('.current-match'); if (currentMark) { currentMark.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); } updateSearchCounter(); }
+            function updateSearchCounter() { if (searchResults.indices.length > 0) { searchCounter.textContent = `${searchResults.currentIndex + 1} / ${searchResults.indices.length}`; } else if (searchResults.query) { searchCounter.textContent = '0 / 0'; } else { searchCounter.textContent = ''; } }
+            findInput.addEventListener('input', debounce(updateSearch, 200));
+            document.getElementById('find-next-button').addEventListener('click', () => { if (searchResults.indices.length > 0) jumpToMatch((searchResults.currentIndex + 1) % searchResults.indices.length); });
+            document.getElementById('find-prev-button').addEventListener('click', () => { if (searchResults.indices.length > 0) jumpToMatch((searchResults.currentIndex - 1 + searchResults.indices.length) % searchResults.indices.length); });
+            document.getElementById('replace-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s || searchResults.currentIndex < 0) return; const index = searchResults.indices[searchResults.currentIndex]; editor.setSelectionRange(index, index + s.length); editor.setRangeText(r, index, index + s.length, 'end'); syncEditorState(); setTimeout(updateSearch, 50); });
+            document.getElementById('replace-all-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s) return; const regex = new RegExp(s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let count = 0; const newVal = editor.value.replace(regex, () => { count++; return r; }); if (count > 0) { editor.value = newVal; syncEditorState(); alert(`已完成 ${count} 处替换。`); updateSearch(); } else { alert('没有找到可替换的匹配项。'); } });
 
-            // --- 初始化 ---
-            loadFromLocalStorage(); // 页面加载时尝试恢复数据
-            historyManager.saveState(editor.value);
-            updateStatusBar();
-            handleFileType(currentFileInfo.name);
+            const findReplaceToggle = document.getElementById('find-replace-toggle'); const panel = document.getElementById('find-replace-panel'); const closePanelButton = document.getElementById('close-panel-button');
+            function togglePanel() { panel.classList.toggle('active'); if (panel.classList.contains('active')) { findInput.focus(); updateSearch(); } else { searchResults.query = ''; updateHighlightOverlay(); } }
+            findReplaceToggle.addEventListener('click', togglePanel); closePanelButton.addEventListener('click', togglePanel);
+            
+            loadFromLocalStorage();
+            if(!localStorage.getItem(AUTOSAVE_CONTENT_KEY)) { historyManager.saveState(editor.value); }
+            syncEditorState(true);
         });
     </script>
 </body>
