@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Web编辑器">
-    <title>Web 编辑器 (最终修复版)</title>
+    <title>Web 编辑器 (持久化版)</title>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
         .container { display: flex; flex-direction: column; height: 100vh; background-color: #f4f4f4; }
@@ -92,32 +92,64 @@
 
             const AUTOSAVE_CONTENT_KEY = 'editor_autosave_content';
             const AUTOSAVE_FILENAME_KEY = 'editor_autosave_filename';
+            const AUTOSAVE_HISTORY_KEY = 'editor_autosave_history'; // 新增历史记录key
 
             function debounce(func, delay) { let t; return function(...a) { clearTimeout(t); t = setTimeout(() => func.apply(this, a), delay); }; }
             
             function updatePreview() { previewFrame.srcdoc = editor.value; }
             function updateStatusBar() { const text = editor.value; charCountEl.textContent = `字符: ${text.length}`; lineCountEl.textContent = `行: ${text.split('\n').length}`; }
 
-            function saveToLocalStorage() { localStorage.setItem(AUTOSAVE_CONTENT_KEY, editor.value); localStorage.setItem(AUTOSAVE_FILENAME_KEY, currentFileInfo.name); }
-            function clearLocalStorage() { localStorage.removeItem(AUTOSAVE_CONTENT_KEY); localStorage.removeItem(AUTOSAVE_FILENAME_KEY); }
-            function loadFromLocalStorage() {
+            function saveSession() {
+                localStorage.setItem(AUTOSAVE_CONTENT_KEY, editor.value);
+                localStorage.setItem(AUTOSAVE_FILENAME_KEY, currentFileInfo.name);
+                localStorage.setItem(AUTOSAVE_HISTORY_KEY, JSON.stringify({ undoStack: historyManager.undoStack, redoStack: historyManager.redoStack }));
+            }
+            function clearSession() {
+                localStorage.removeItem(AUTOSAVE_CONTENT_KEY);
+                localStorage.removeItem(AUTOSAVE_FILENAME_KEY);
+                localStorage.removeItem(AUTOSAVE_HISTORY_KEY);
+            }
+            function loadSession() {
                 const savedContent = localStorage.getItem(AUTOSAVE_CONTENT_KEY);
                 if (savedContent) {
                     const savedFilename = localStorage.getItem(AUTOSAVE_FILENAME_KEY) || 'untitled.txt';
-                    if (confirm(`检测到上次未保存的内容 (${savedFilename})，是否恢复？`)) {
+                    if (confirm(`检测到上次未保存的会话 (${savedFilename})，是否恢复？`)) {
                         editor.value = savedContent;
                         handleFileType(savedFilename);
+                        
+                        const savedHistoryJSON = localStorage.getItem(AUTOSAVE_HISTORY_KEY);
+                        if (savedHistoryJSON) {
+                            try {
+                                const savedHistory = JSON.parse(savedHistoryJSON);
+                                historyManager.undoStack = savedHistory.undoStack || [savedContent];
+                                historyManager.redoStack = savedHistory.redoStack || [];
+                            } catch (e) {
+                                historyManager.clear();
+                                historyManager.saveState(savedContent);
+                            }
+                        }
                         syncEditorState(true);
-                    } else { clearLocalStorage(); }
+                        updateUndoRedoButtons();
+                    } else { clearSession(); }
                 }
             }
             
             function syncEditorState(isInitialLoad = false) {
+                highlightOverlay.textContent = editor.value;
                 if (currentFileInfo.type === 'text/html') { updatePreview(); }
                 updateStatusBar();
-                if(!isInitialLoad) { historyManager.saveState(editor.value); }
                 invalidateSearchResults();
-                highlightOverlay.textContent = editor.value;
+                if(!isInitialLoad) {
+                     debouncedSaveState();
+                }
+            }
+            
+            function handleContentChange(sourceAction) {
+                syncEditorState();
+                if(sourceAction !== 'undo' && sourceAction !== 'redo'){
+                    historyManager.saveState(editor.value);
+                }
+                saveSession();
             }
 
             function handleFileType(fileName) {
@@ -131,34 +163,27 @@
                 if (!isHtml) { document.getElementById('editor-pane').style.display = 'block'; document.getElementById('preview-pane').style.display = 'none'; document.getElementById('show-editor-btn').classList.add('active'); }
             }
 
-            editor.addEventListener('input', () => {
-                syncEditorState();
-                saveToLocalStorage();
-                debouncedSaveState();
-            });
+            editor.addEventListener('input', () => handleContentChange('input'));
             editor.addEventListener('scroll', () => { highlightOverlay.scrollTop = editor.scrollTop; highlightOverlay.scrollLeft = editor.scrollLeft; });
-            editor.addEventListener('keydown', function(e) { if (e.key === 'Tab') { e.preventDefault(); const start = this.selectionStart; this.value = this.value.substring(0, start) + "  " + this.value.substring(this.selectionEnd); this.selectionStart = this.selectionEnd = start + 2; } const pairs = { '(': ')', '[': ']', '{': '}', "'": "'", '"': '"' }; if (pairs[e.key]) { e.preventDefault(); const start = this.selectionStart; const end = this.selectionEnd; this.value = this.value.substring(0, start) + e.key + this.value.substring(start, end) + pairs[e.key] + this.value.substring(end); this.selectionStart = this.selectionEnd = start + 1; } });
+            editor.addEventListener('paste', () => { setTimeout(() => { editor.scrollTop = 0; editor.setSelectionRange(0, 0); handleContentChange('paste'); }, 1); });
+            editor.addEventListener('keydown', function(e) { if (e.key === 'Tab') { e.preventDefault(); const start = this.selectionStart; this.value = this.value.substring(0, start) + "  " + this.value.substring(this.selectionEnd); this.selectionStart = this.selectionEnd = start + 2; handleContentChange('tab'); } const pairs = { '(': ')', '[': ']', '{': '}', "'": "'", '"': '"' }; if (pairs[e.key]) { e.preventDefault(); const start = this.selectionStart; const end = this.selectionEnd; this.value = this.value.substring(0, start) + e.key + this.value.substring(start, end) + pairs[e.key] + this.value.substring(end); this.selectionStart = this.selectionEnd = start + 1; handleContentChange('pair'); } });
             
             document.getElementById('file-input').addEventListener('change', (e) => {
-                clearLocalStorage(); const file = e.target.files[0]; if (!file) return; handleFileType(file.name);
+                clearSession(); const file = e.target.files[0]; if (!file) return; handleFileType(file.name);
                 const reader = new FileReader();
-                reader.onload = (e) => { editor.value = e.target.result; historyManager.clear(); syncEditorState(true); };
+                reader.onload = (e) => { editor.value = e.target.result; historyManager.clear(); historyManager.saveState(editor.value); syncEditorState(true); };
                 reader.readAsText(file); e.target.value = null;
             });
             document.getElementById('save-button').addEventListener('click', () => {
                 const blob = new Blob([editor.value], { type: `${currentFileInfo.type};charset=utf-8` });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = currentFileInfo.name;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = currentFileInfo.name;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 URL.revokeObjectURL(link.href);
-                clearLocalStorage();
+                clearSession();
             });
-            document.getElementById('clear-content-btn').addEventListener('click', () => { if (confirm('确定要清空所有内容吗？此操作可以撤销。')) { historyManager.saveState(editor.value); editor.value = ''; syncEditorState(); clearLocalStorage(); } });
+            document.getElementById('clear-content-btn').addEventListener('click', () => { if (confirm('确定要清空所有内容吗？此操作可以撤销。')) { historyManager.saveState(editor.value); editor.value = ''; handleContentChange('clear'); clearSession(); } });
             document.getElementById('copy-content-btn').addEventListener('click', () => { if (!editor.value) { alert('内容为空。'); return; } navigator.clipboard.writeText(editor.value).then(() => { alert('已复制到剪贴板！'); }).catch(err => { alert('复制失败。'); }); });
-            document.getElementById('format-newlines-btn').addEventListener('click', () => { const newText = editor.value.replace(/\\n/g, '\n'); if (editor.value !== newText) { editor.value = newText; syncEditorState(); alert('格式化完成！'); } else { alert('未找到 "\\n"。'); } });
+            document.getElementById('format-newlines-btn').addEventListener('click', () => { const newText = editor.value.replace(/\\n/g, '\n'); if (editor.value !== newText) { editor.value = newText; handleContentChange('format-newline'); alert('格式化完成！'); } else { alert('未找到 "\\n"。'); } });
             
             const chapterModal = document.getElementById('chapter-modal');
             const chapterModalBackdrop = document.getElementById('chapter-modal-backdrop');
@@ -169,14 +194,11 @@
                 if (!contentToAdd) { alert("请输入要添加的内容。"); return; }
                 const chapterRegex = /^(第\s*[一二三四五六七八九十百千万\d]+\s*章.*)$/gm;
                 let changesMade = 0;
-                let newText = editor.value.replace(chapterRegex, (match) => {
-                    changesMade++;
-                    return `\n\n${contentToAdd}\n\n${match}`;
-                });
+                let newText = editor.value.replace(chapterRegex, (match) => { changesMade++; return `\n\n${contentToAdd}\n\n${match}`; });
                 if (changesMade > 0) {
                     newText = newText.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
                     editor.value = newText;
-                    syncEditorState();
+                    handleContentChange('chapter-process');
                     alert(`已为 ${changesMade} 个章节标题添加分隔内容。`);
                 } else { alert('未找到符合格式的章节标题。\n格式示例: "第一章" 或 "第 1 章"'); }
                 chapterModal.style.display = 'none';
@@ -189,52 +211,32 @@
             
             const undoButton = document.getElementById('undo-button'); const redoButton = document.getElementById('redo-button');
             const historyManager = { undoStack: [], redoStack: [], limit: 50, saveState(state) { if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== state) { this.undoStack.push(state); if (this.undoStack.length > this.limit) this.undoStack.shift(); this.redoStack = []; updateUndoRedoButtons(); } }, undo() { if (this.undoStack.length > 1) { this.redoStack.push(this.undoStack.pop()); updateUndoRedoButtons(); return this.undoStack[this.undoStack.length - 1]; } return null; }, redo() { if (this.redoStack.length > 0) { const nextState = this.redoStack.pop(); this.undoStack.push(nextState); updateUndoRedoButtons(); return nextState; } return null; }, clear() { this.undoStack = []; this.redoStack = []; } };
-            const debouncedSaveState = debounce(() => historyManager.saveState(editor.value), 400);
+            const debouncedSaveState = debounce(() => saveSession(), 500);
             function updateUndoRedoButtons() { undoButton.disabled = historyManager.undoStack.length <= 1; redoButton.disabled = historyManager.redoStack.length === 0; }
-            undoButton.addEventListener('click', () => { const state = historyManager.undo(); if (state !== null) { editor.value = state; syncEditorState(); } });
-            redoButton.addEventListener('click', () => { const state = historyManager.redo(); if (state !== null) { editor.value = state; syncEditorState(); } });
+            undoButton.addEventListener('click', () => { const state = historyManager.undo(); if (state !== null) { editor.value = state; handleContentChange('undo'); } });
+            redoButton.addEventListener('click', () => { const state = historyManager.redo(); if (state !== null) { editor.value = state; handleContentChange('redo'); } });
             
             const findInput = document.getElementById('find-input'); const searchCounter = document.getElementById('search-counter');
             function escapeHTML(str) { return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
             function invalidateSearchResults() { searchCounter.textContent = '内容已修改'; searchResults.indices = []; updateHighlightOverlay(); }
-            function updateHighlightOverlay() {
-                if (!searchResults.query || searchResults.indices.length === 0) { highlightOverlay.innerHTML = escapeHTML(editor.value); return; }
-                const escapedQuery = searchResults.query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const regex = new RegExp(escapedQuery, 'gi'); let newHTML = ''; let lastIndex = 0; let match;
-                while((match = regex.exec(editor.value)) !== null) {
-                    const matchIndexInArray = searchResults.indices.indexOf(match.index);
-                    const isCurrent = matchIndexInArray === searchResults.currentIndex;
-                    newHTML += escapeHTML(editor.value.substring(lastIndex, match.index));
-                    newHTML += `<mark class="${isCurrent ? 'current-match' : ''}">${escapeHTML(match[0])}</mark>`;
-                    lastIndex = regex.lastIndex;
-                }
-                newHTML += escapeHTML(editor.value.substring(lastIndex));
-                highlightOverlay.innerHTML = newHTML;
-            }
-            function updateSearch() {
-                const query = findInput.value;
-                if (!query) { searchResults = { indices: [], currentIndex: -1, query: '' }; updateSearchCounter(); updateHighlightOverlay(); return; }
-                searchResults.query = query; searchResults.indices = [];
-                const regex = new RegExp(query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let match;
-                while ((match = regex.exec(editor.value)) !== null) { searchResults.indices.push(match.index); }
-                searchResults.currentIndex = -1;
-                if (searchResults.indices.length > 0) { jumpToMatch(0); } else { updateSearchCounter(); updateHighlightOverlay(); }
-            }
+            function updateHighlightOverlay() { if (!searchResults.query || searchResults.indices.length === 0) { highlightOverlay.innerHTML = escapeHTML(editor.value); return; } const escapedQuery = searchResults.query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); const regex = new RegExp(escapedQuery, 'gi'); let newHTML = ''; let lastIndex = 0; let match; while((match = regex.exec(editor.value)) !== null) { const isCurrent = searchResults.indices.indexOf(match.index) === searchResults.currentIndex; newHTML += escapeHTML(editor.value.substring(lastIndex, match.index)); newHTML += `<mark class="${isCurrent ? 'current-match' : ''}">${escapeHTML(match[0])}</mark>`; lastIndex = regex.lastIndex; } newHTML += escapeHTML(editor.value.substring(lastIndex)); highlightOverlay.innerHTML = newHTML; }
+            function updateSearch() { const query = findInput.value; if (!query) { searchResults = { indices: [], currentIndex: -1, query: '' }; updateSearchCounter(); updateHighlightOverlay(); return; } searchResults.query = query; searchResults.indices = []; const regex = new RegExp(query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let match; while ((match = regex.exec(editor.value)) !== null) { searchResults.indices.push(match.index); } searchResults.currentIndex = -1; if (searchResults.indices.length > 0) { jumpToMatch(0); } else { updateSearchCounter(); updateHighlightOverlay(); } }
             function jumpToMatch(index) { if (searchResults.indices.length === 0) return; searchResults.currentIndex = index; updateHighlightOverlay(); const currentMark = highlightOverlay.querySelector('.current-match'); if (currentMark) { currentMark.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); } updateSearchCounter(); }
             function updateSearchCounter() { if (searchResults.indices.length > 0) { searchCounter.textContent = `${searchResults.currentIndex + 1} / ${searchResults.indices.length}`; } else if (searchResults.query) { searchCounter.textContent = '0 / 0'; } else { searchCounter.textContent = ''; } }
             findInput.addEventListener('input', debounce(updateSearch, 200));
             document.getElementById('find-next-button').addEventListener('click', () => { if (searchResults.indices.length > 0) jumpToMatch((searchResults.currentIndex + 1) % searchResults.indices.length); });
             document.getElementById('find-prev-button').addEventListener('click', () => { if (searchResults.indices.length > 0) jumpToMatch((searchResults.currentIndex - 1 + searchResults.indices.length) % searchResults.indices.length); });
-            document.getElementById('replace-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s || searchResults.currentIndex < 0) return; const index = searchResults.indices[searchResults.currentIndex]; editor.setSelectionRange(index, index + s.length); editor.setRangeText(r, index, index + s.length, 'end'); syncEditorState(); setTimeout(updateSearch, 50); });
-            document.getElementById('replace-all-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s) return; const regex = new RegExp(s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let count = 0; const newVal = editor.value.replace(regex, () => { count++; return r; }); if (count > 0) { editor.value = newVal; syncEditorState(); alert(`已完成 ${count} 处替换。`); updateSearch(); } else { alert('没有找到可替换的匹配项。'); } });
+            document.getElementById('replace-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s || searchResults.currentIndex < 0) return; const index = searchResults.indices[searchResults.currentIndex]; editor.setSelectionRange(index, index + s.length); editor.setRangeText(r, index, index + s.length, 'end'); handleContentChange('replace'); setTimeout(updateSearch, 50); });
+            document.getElementById('replace-all-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s) return; const regex = new RegExp(s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let count = 0; const newVal = editor.value.replace(regex, () => { count++; return r; }); if (count > 0) { editor.value = newVal; handleContentChange('replace-all'); alert(`已完成 ${count} 处替换。`); updateSearch(); } else { alert('没有找到可替换的匹配项。'); } });
 
             const findReplaceToggle = document.getElementById('find-replace-toggle'); const panel = document.getElementById('find-replace-panel'); const closePanelButton = document.getElementById('close-panel-button');
             function togglePanel() { panel.classList.toggle('active'); if (panel.classList.contains('active')) { findInput.focus(); updateSearch(); } else { searchResults.query = ''; updateHighlightOverlay(); } }
             findReplaceToggle.addEventListener('click', togglePanel); closePanelButton.addEventListener('click', togglePanel);
             
-            loadFromLocalStorage();
-            if(!localStorage.getItem(AUTOSAVE_CONTENT_KEY)) { historyManager.saveState(editor.value); }
+            loadSession();
+            if(!localStorage.getItem(AUTOSAVE_CONTENT_KEY)) { historyManager.saveState(''); }
             syncEditorState(true);
+            updateUndoRedoButtons();
         });
     </script>
 </body>
