@@ -111,14 +111,14 @@
                 if (savedContent) {
                     const savedFilename = localStorage.getItem(AUTOSAVE_FILENAME_KEY) || 'untitled.txt';
                     if (confirm(`检测到上次未保存的会话 (${savedFilename})，是否恢复？`)) {
-                        editor.value = savedContent;
-                        handleFileType(savedFilename);
+                        editor.value = savedContent; handleFileType(savedFilename);
                         const savedHistoryJSON = localStorage.getItem(AUTOSAVE_HISTORY_KEY);
                         if (savedHistoryJSON) {
                             try { const savedHistory = JSON.parse(savedHistoryJSON); historyManager.undoStack = savedHistory.undoStack || [savedContent]; historyManager.redoStack = savedHistory.redoStack || []; }
                             catch (e) { historyManager.clear(); historyManager.saveState(savedContent); }
                         }
                         syncEditorState({isInitialLoad: true});
+                        updateUndoRedoButtons();
                     } else { clearSession(); }
                 }
             }
@@ -126,30 +126,24 @@
             function syncEditorState(options = {}) {
                 const { isInitialLoad = false, preserveScroll = false } = options;
                 let oldScrollTop, oldScrollLeft;
-                if(preserveScroll) {
-                    oldScrollTop = editor.scrollTop;
-                    oldScrollLeft = editor.scrollLeft;
-                }
+                if(preserveScroll) { oldScrollTop = editor.scrollTop; oldScrollLeft = editor.scrollLeft; }
 
                 highlightOverlay.textContent = editor.value;
                 if (currentFileInfo.type === 'text/html') { updatePreview(); }
                 updateStatusBar();
                 invalidateSearchResults();
 
-                if(preserveScroll) {
-                    editor.scrollTop = oldScrollTop;
-                    editor.scrollLeft = oldScrollLeft;
-                }
-
+                if(preserveScroll) { editor.scrollTop = oldScrollTop; editor.scrollLeft = oldScrollLeft; }
                 if(!isInitialLoad) { debouncedSaveState(); }
             }
-
+            
             function setValueAndSync(newValue, sourceAction) {
+                const oldScrollTop = editor.scrollTop;
                 editor.value = newValue;
                 syncEditorState({ preserveScroll: true });
-                if (sourceAction !== 'undo' && sourceAction !== 'redo') {
-                    historyManager.saveState(editor.value);
-                }
+                editor.scrollTop = oldScrollTop;
+
+                if (sourceAction !== 'undo' && sourceAction !== 'redo') { historyManager.saveState(newValue); }
                 saveSession();
             }
 
@@ -232,7 +226,7 @@
             findInput.addEventListener('input', debounce(updateSearch, 200));
             document.getElementById('find-next-button').addEventListener('click', () => { if (searchResults.indices.length > 0) jumpToMatch((searchResults.currentIndex + 1) % searchResults.indices.length); });
             document.getElementById('find-prev-button').addEventListener('click', () => { if (searchResults.indices.length > 0) jumpToMatch((searchResults.currentIndex - 1 + searchResults.indices.length) % searchResults.indices.length); });
-            document.getElementById('replace-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s || searchResults.currentIndex < 0) return; const index = searchResults.indices[searchResults.currentIndex]; editor.setSelectionRange(index, index + s.length); editor.setRangeText(r, index, index + s.length, 'end'); setValueAndSync(editor.value, 'replace'); setTimeout(updateSearch, 50); });
+            document.getElementById('replace-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s || searchResults.currentIndex < 0) return; const index = searchResults.indices[searchResults.currentIndex]; const oldScroll = editor.scrollTop; editor.setSelectionRange(index, index + s.length); editor.setRangeText(r, index, index + s.length, 'end'); editor.scrollTop = oldScroll; setValueAndSync(editor.value, 'replace'); setTimeout(updateSearch, 50); });
             document.getElementById('replace-all-button').addEventListener('click', () => { const s = findInput.value; const r = document.getElementById('replace-input').value; if (!s) return; const regex = new RegExp(s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'); let count = 0; const newVal = editor.value.replace(regex, () => { count++; return r; }); if (count > 0) { setValueAndSync(newVal, 'replace-all'); alert(`已完成 ${count} 处替换。`); updateSearch(); } else { alert('没有找到可替换的匹配项。'); } });
 
             const findReplaceToggle = document.getElementById('find-replace-toggle'); const panel = document.getElementById('find-replace-panel'); const closePanelButton = document.getElementById('close-panel-button');
@@ -242,6 +236,7 @@
             loadSession();
             if(!localStorage.getItem(AUTOSAVE_CONTENT_KEY)) { historyManager.saveState(''); }
             syncEditorState({isInitialLoad: true});
+            updateUndoRedoButtons();
         });
     </script>
 </body>
